@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GarboChess</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="js/jquery-1.8.2.min.js"></script>
+  <script src="js/jquery-ui-1.8.24.custom.min.js"></script>
+  <script src="js/garbochess.js"></script>
+  <script src="js/boardui.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e0e0f;
+      --surface: #17181a;
+      --surface2: #1e2022;
+      --border: #2a2d31;
+      --border2: #363a3f;
+      --light-sq: #f0d9b5;
+      --dark-sq: #b58863;
+      --highlight: #cdd26a;
+      --highlight-dark: #aaa23a;
+      --accent: #e8c97a;
+      --accent2: #c4a35a;
+      --text: #e8e8e6;
+      --text-muted: #888;
+      --text-dim: #555;
+      --green: #5cb85c;
+      --red: #c0392b;
+      --cell: 64px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Subtle noise texture */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+    }
+
+    /* Header */
+    header {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--accent);
+    }
+
+    .logo span {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Main layout */
+    .main {
+      width: 100%;
+      max-width: 900px;
+      display: grid;
+      grid-template-columns: auto 260px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    /* Board area */
+    .board-area {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .player-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .player-bar.top { border-radius: 10px 10px 0 0; border-bottom: none; }
+    .player-bar.bottom { border-radius: 0 0 10px 10px; border-top: none; }
+
+    .player-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .player-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+    }
+
+    .player-name {
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .player-side {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+    }
+
+    .player-thinking {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--accent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .player-thinking.active { opacity: 1; }
+
+    .thinking-dots span {
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin: 0 1px;
+      animation: blink 1.2s infinite;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 0.2; transform: translateY(0); }
+      50% { opacity: 1; transform: translateY(-2px); }
+    }
+
+    /* Board wrapper */
+    .board-wrapper {
+      position: relative;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .board-coords {
+      position: absolute;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .board-coords.files {
+      bottom: -20px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-around;
+    }
+
+    .board-coords.ranks {
+      top: 0;
+      left: -18px;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+    }
+
+    .coord-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--text-dim);
+      text-align: center;
+      width: 14px;
+    }
+
+    #board {
+      display: block;
+      line-height: 0;
+    }
+
+    #board table {
+      border-collapse: collapse;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
+    }
+
+    #board td {
+      transition: filter 0.1s;
+    }
+
+    #board td:hover {
+      filter: brightness(1.08);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .card-body {
+      padding: 14px;
+    }
+
+    /* Controls */
+    .controls-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .control-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .seg-control {
+      display: flex;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px;
+      gap: 3px;
+    }
+
+    .seg-btn {
+      flex: 1;
+      padding: 6px 8px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .seg-btn.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      border: 1px solid var(--border2);
+    }
+
+    .difficulty-slider {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slider-track {
+      position: relative;
+      height: 4px;
+      background: var(--surface2);
+      border-radius: 2px;
+      border: 1px solid var(--border);
+    }
+
+    .slider-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      border-radius: 2px;
+      transition: width 0.2s;
+    }
+
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg);
+      margin-top: -6px;
+      box-shadow: 0 0 0 1px var(--accent2);
+    }
+
+    input[type=range]::-webkit-slider-runnable-track {
+      height: 4px;
+      background: var(--surface2);
+      border-radius: 2px;
+      border: 1px solid var(--border);
+    }
+
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-dim);
+      font-family: 'DM Mono', monospace;
+    }
+
+    .difficulty-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 500;
+      background: rgba(232, 201, 122, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(232, 201, 122, 0.2);
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* Action buttons */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 9px 14px;
+      border-radius: 7px;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      background: var(--border);
+      border-color: var(--border2);
+      transform: translateY(-1px);
+    }
+
+    .btn:active { transform: translateY(0); }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent2);
+      color: #1a1200;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover {
+      background: #f0d88a;
+      border-color: var(--accent);
+    }
+
+    .btn-danger {
+      color: #e07070;
+      border-color: rgba(192, 57, 43, 0.3);
+    }
+
+    .btn-danger:hover {
+      background: rgba(192, 57, 43, 0.15);
+      border-color: rgba(192, 57, 43, 0.5);
+      color: #f08080;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-row .btn { flex: 1; }
+
+    /* Analysis toggle */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle-label {
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .toggle {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+
+    .toggle input:checked ~ .toggle-track {
+      background: rgba(232, 201, 122, 0.2);
+      border-color: var(--accent2);
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 14px;
+      height: 14px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: all 0.2s;
+    }
+
+    .toggle input:checked ~ .toggle-track .toggle-thumb {
+      transform: translateX(16px);
+      background: var(--accent);
+    }
+
+    /* Move history */
+    .move-history {
+      max-height: 160px;
+      overflow-y: auto;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+    }
+
+    .move-history::-webkit-scrollbar { width: 4px; }
+    .move-history::-webkit-scrollbar-track { background: transparent; }
+    .move-history::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .move-row {
+      display: grid;
+      grid-template-columns: 28px 1fr 1fr;
+      gap: 4px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .move-row:last-child { border-bottom: none; }
+
+    .move-num { color: var(--text-dim); font-size: 11px; }
+
+    .move-cell {
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.1s;
+      color: var(--text);
+    }
+
+    .move-cell:hover { background: var(--surface2); }
+    .move-cell.latest { color: var(--accent); }
+
+    .move-placeholder { color: var(--text-dim); }
+
+    /* Engine output / PV */
+    #output {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      min-height: 36px;
+      line-height: 1.6;
+      word-break: break-all;
+    }
+
+    /* FEN area */
+    .fen-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      resize: none;
+      transition: border-color 0.2s;
+    }
+
+    .fen-input:focus {
+      outline: none;
+      border-color: var(--accent2);
+    }
+
+    /* Game result overlay */
+    .result-banner {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(14, 14, 15, 0.95);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 20px 28px;
+      text-align: center;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      min-width: 200px;
+    }
+
+    .result-banner.show { display: block; animation: fadeIn 0.3s ease; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -48%); }
+      to { opacity: 1; transform: translate(-50%, -50%); }
+    }
+
+    .result-icon { font-size: 36px; margin-bottom: 8px; }
+    .result-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .result-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+
+    /* Capture tray */
+    .capture-tray {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      min-height: 20px;
+      padding: 4px 14px;
+      align-items: center;
+    }
+
+    .captured-piece {
+      font-size: 16px;
+      opacity: 0.7;
+      line-height: 1;
+    }
+
+    .material-score {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--accent);
+      margin-left: auto;
+      padding-right: 14px;
+    }
+
+    /* Responsive */
+    @media (max-width: 720px) {
+      :root { --cell: 44px; }
+      .main { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      header { flex-direction: column; gap: 10px; align-items: flex-start; }
+    }
+
+    /* Sprite classes from original — keep exactly as-is */
+    .no-highlight { -webkit-tap-highlight-color: rgba(0,0,0,0); }
+    .sprite-bishop_black{ background-position: 0 0; width: 45px; height: 45px; }
+    .sprite-bishop_white{ background-position: 0 -95px; width: 45px; height: 45px; }
+    .sprite-king_black{ background-position: 0 -190px; width: 45px; height: 45px; }
+    .sprite-king_white{ background-position: 0 -285px; width: 45px; height: 45px; }
+    .sprite-knight_black{ background-position: 0 -380px; width: 45px; height: 45px; }
+    .sprite-knight_white{ background-position: 0 -475px; width: 45px; height: 45px; }
+    .sprite-pawn_black{ background-position: 0 -570px; width: 45px; height: 45px; }
+    .sprite-pawn_white{ background-position: 0 -665px; width: 45px; height: 45px; }
+    .sprite-queen_black{ background-position: 0 -760px; width: 45px; height: 45px; }
+    .sprite-queen_white{ background-position: 0 -855px; width: 45px; height: 45px; }
+    .sprite-rook_black{ background-position: 0 -950px; width: 45px; height: 45px; }
+    .sprite-rook_white{ background-position: 0 -1045px; width: 45px; height: 45px; }
+
+    /* Override board cell size */
+    #board td {
+      width: var(--cell) !important;
+      height: var(--cell) !important;
+    }
+
+    #board .sprite-bishop_black, #board .sprite-bishop_white,
+    #board .sprite-bishop_black, #board .sprite-bishop_white,
+    #board .sprite-king_black, #board .sprite-king_white,
+    #board .sprite-knight_black, #board .sprite-knight_white,
+    #board .sprite-pawn_black, #board .sprite-pawn_white,
+    #board .sprite-queen_black, #board .sprite-queen_white,
+    #board .sprite-rook_black, #board .sprite-rook_white {
+      width: var(--cell) !important;
+      height: var(--cell) !important;
+    }
+
+    /* Last move highlight */
+    td.last-move-from, td.last-move-to {
+      outline: 3px inset rgba(205, 210, 106, 0.5);
+      outline-offset: -3px;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">Garbo<span>Chess</span></div>
+    <div class="header-status">
+      <div class="status-dot"></div>
+      Engine active
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- Board Column -->
+    <div class="board-area">
+
+      <!-- Opponent bar (top) -->
+      <div class="player-bar top" id="bar-opponent">
+        <div class="player-info">
+          <div class="player-avatar">🤖</div>
+          <div>
+            <div class="player-name">GarboChess Engine</div>
+            <div class="player-side" id="engine-side-label">Playing Black</div>
+          </div>
+        </div>
+        <div class="player-thinking" id="thinking-indicator">
+          <span style="font-size:11px;color:var(--text-muted)">Thinking</span>
+          <div class="thinking-dots"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+
+      <!-- Captured pieces (opponent's captures shown here) -->
+      <div class="capture-tray" id="captured-by-engine" style="background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border);">
+        <span class="material-score" id="material-score-top"></span>
+      </div>
+
+      <!-- Board -->
+      <div class="board-wrapper">
+        <div id="board"></div>
+        <div class="result-banner" id="result-banner">
+          <div class="result-icon" id="result-icon">♟</div>
+          <div class="result-title" id="result-title">Game Over</div>
+          <div class="result-sub" id="result-sub"></div>
+          <button class="btn btn-primary" onclick="startNewGame()" style="width:100%">Play Again</button>
+        </div>
+      </div>
+
+      <!-- Captured pieces (player's captures) -->
+      <div class="capture-tray" id="captured-by-player" style="background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border);">
+        <span class="material-score" id="material-score-bottom"></span>
+      </div>
+
+      <!-- Player bar (bottom) -->
+      <div class="player-bar bottom" id="bar-player">
+        <div class="player-info">
+          <div class="player-avatar">👤</div>
+          <div>
+            <div class="player-name">You</div>
+            <div class="player-side" id="player-side-label">Playing White</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <!-- Game Controls -->
+      <div class="card">
+        <div class="card-header">Game</div>
+        <div class="card-body controls-grid">
+
+          <div class="control-row">
+            <div class="control-label">Play as</div>
+            <div class="seg-control">
+              <button class="seg-btn active" id="btn-white" onclick="setPlayerColor('white')">♔ White</button>
+              <button class="seg-btn" id="btn-black" onclick="setPlayerColor('black')">♚ Black</button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="control-label">Difficulty</div>
+              <div class="difficulty-badge" id="diff-label">Medium</div>
+            </div>
+            <input type="range" id="difficulty-range" min="0" max="4" value="2" oninput="setDifficulty(this.value)">
+            <div class="slider-labels">
+              <span>Beginner</span>
+              <span>Grandmaster</span>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" onclick="startNewGame()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+            New Game
+          </button>
+
+          <div class="btn-row">
+            <button class="btn" onclick="UIUndoMove()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 14-4-4 4-4"/><path d="M5 10h11a4 4 0 0 1 0 8h-1"/></svg>
+              Undo
+            </button>
+            <button class="btn btn-danger" onclick="resignGame()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v16"/><path d="M4 9h12l-4 3 4 3H4"/></svg>
+              Resign
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Analysis -->
+      <div class="card">
+        <div class="card-header">Analysis</div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <div class="toggle-row">
+            <span class="toggle-label">Engine Analysis</span>
+            <label class="toggle">
+              <input type="checkbox" id="analysis-toggle" onchange="toggleAnalysis()">
+              <div class="toggle-track"><div class="toggle-thumb"></div></div>
+            </label>
+          </div>
+          <div id="output" style="display:block"></div>
+        </div>
+      </div>
+
+      <!-- Move History -->
+      <div class="card">
+        <div class="card-header">Move History</div>
+        <div class="card-body" style="padding:0">
+          <div class="move-history" id="move-history-display">
+            <div style="padding:12px 14px;color:var(--text-dim);font-size:12px;font-family:'DM Mono',monospace;">No moves yet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FEN -->
+      <div class="card">
+        <div class="card-header">Position (FEN)</div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+          <textarea class="fen-input" id="FenTextBox" rows="3" onchange="UIChangeFEN()"></textarea>
+          <button class="btn" onclick="copyFEN()" style="font-size:12px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            Copy FEN
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Hidden original textarea for PGN (boardui.js writes to it) -->
+<textarea id="PgnTextBox" style="display:none"></textarea>
+<!-- Hidden original analysis link (boardui.js may reference it) -->
+<a id="AnalysisToggleLink" href="javascript:UIAnalyzeToggle()" style="display:none">Analysis: Off</a>
+
+<script>
+// ─── Difficulty presets ───────────────────────────────────────────────
+const DIFFICULTY_TIMES = [300, 800, 2000, 4000, 8000];
+const DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard', 'Grandmaster'];
+let currentDifficulty = 2;
+
+function setDifficulty(val) {
+  currentDifficulty = parseInt(val);
+  g_timeout = DIFFICULTY_TIMES[currentDifficulty];
+  document.getElementById('diff-label').textContent = DIFFICULTY_NAMES[currentDifficulty];
+}
+
+// ─── Player color ─────────────────────────────────────────────────────
+function setPlayerColor(color) {
+  const isWhite = color === 'white';
+  document.getElementById('btn-white').classList.toggle('active', isWhite);
+  document.getElementById('btn-black').classList.toggle('active', !isWhite);
+  document.getElementById('player-side-label').textContent = isWhite ? 'Playing White' : 'Playing Black';
+  document.getElementById('engine-side-label').textContent = isWhite ? 'Playing Black' : 'Playing White';
+
+  if (g_playerWhite !== isWhite) {
+    g_playerWhite = isWhite;
+    RedrawBoard();
+  }
+}
+
+// ─── New game ─────────────────────────────────────────────────────────
+function startNewGame() {
+  document.getElementById('result-banner').classList.remove('show');
+  capturedByEngine = [];
+  capturedByPlayer = [];
+  moveHistoryMoves = [];
+  renderMoveHistory();
+  renderCaptures();
+  UINewGame();
+}
+
+// ─── Resign ───────────────────────────────────────────────────────────
+function resignGame() {
+  showResult('🏳️', 'You Resigned', 'Better luck next time.');
+}
+
+// ─── Result banner ────────────────────────────────────────────────────
+function showResult(icon, title, sub) {
+  document.getElementById('result-icon').textContent = icon;
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-sub').textContent = sub;
+  document.getElementById('result-banner').classList.add('show');
+}
+
+// ─── Analysis toggle ─────────────────────────────────────────────────
+function toggleAnalysis() {
+  UIAnalyzeToggle();
+}
+
+// ─── Copy FEN ─────────────────────────────────────────────────────────
+function copyFEN() {
+  const fen = document.getElementById('FenTextBox').value;
+  navigator.clipboard.writeText(fen).then(() => {
+    const btn = event.currentTarget;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ Copied';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 1500);
+  });
+}
+
+// ─── Move history ─────────────────────────────────────────────────────
+let moveHistoryMoves = [];
+
+function renderMoveHistory() {
+  const el = document.getElementById('move-history-display');
+  if (moveHistoryMoves.length === 0) {
+    el.innerHTML = '<div style="padding:12px 14px;color:var(--text-dim);font-size:12px;font-family:\'DM Mono\',monospace;">No moves yet</div>';
+    return;
+  }
+  let html = '';
+  for (let i = 0; i < moveHistoryMoves.length; i += 2) {
+    const num = Math.floor(i / 2) + 1;
+    const w = moveHistoryMoves[i] || '';
+    const b = moveHistoryMoves[i + 1] || '';
+    const wLatest = (i === moveHistoryMoves.length - 1) ? 'latest' : '';
+    const bLatest = (i + 1 === moveHistoryMoves.length - 1) ? 'latest' : '';
+    html += `<div class="move-row">
+      <span class="move-num">${num}.</span>
+      <span class="move-cell ${wLatest}">${w}</span>
+      <span class="move-cell ${bLatest}">${b || '<span class="move-placeholder">...</span>'}</span>
+    </div>`;
+  }
+  el.innerHTML = html;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ─── Capture tracking ─────────────────────────────────────────────────
+let capturedByEngine = [];
+let capturedByPlayer = [];
+
+const PIECE_UNICODE = {
+  pawn_white: '♙', pawn_black: '♟',
+  rook_white: '♖', rook_black: '♜',
+  knight_white: '♘', knight_black: '♞',
+  bishop_white: '♗', bishop_black: '♝',
+  queen_white: '♕', queen_black: '♛',
+  king_white: '♔', king_black: '♚',
+};
+
+const PIECE_VALUES = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
+
+function renderCaptures() {
+  const engineEl = document.getElementById('captured-by-engine');
+  const playerEl = document.getElementById('captured-by-player');
+
+  const renderTray = (pieces) => pieces.map(p => `<span class="captured-piece">${PIECE_UNICODE[p] || ''}</span>`).join('');
+
+  const engineScore = capturedByEngine.reduce((s, p) => s + (PIECE_VALUES[p.split('_')[0]] || 0), 0);
+  const playerScore = capturedByPlayer.reduce((s, p) => s + (PIECE_VALUES[p.split('_')[0]] || 0), 0);
+  const diff = playerScore - engineScore;
+
+  engineEl.innerHTML = renderTray(capturedByEngine) + `<span class="material-score">${engineScore > playerScore ? '+' + (engineScore - playerScore) : ''}</span>`;
+  playerEl.innerHTML = renderTray(capturedByPlayer) + `<span class="material-score">${diff > 0 ? '+' + diff : ''}</span>`;
+}
+
+// ─── Thinking indicator ───────────────────────────────────────────────
+function setThinking(active) {
+  document.getElementById('thinking-indicator').classList.toggle('active', active);
+}
+
+// ─── Patch boardui functions to hook our UI ───────────────────────────
+const _origUpdatePgnTextBox = window.UpdatePgnTextBox;
+window.UpdatePgnTextBox = function(move) {
+  _origUpdatePgnTextBox(move);
+  // Sync move history from PGN textarea
+  const pgn = document.getElementById('PgnTextBox').value.trim();
+  // Parse moves from PGN: "1. e4 e5 2. Nf3 ..."
+  moveHistoryMoves = [];
+  const tokens = pgn.split(/\s+/).filter(t => t && !t.match(/^\d+\.$/));
+  moveHistoryMoves = tokens;
+  renderMoveHistory();
+};
+
+const _origFinishMove = window.FinishMove;
+window.FinishMove = function(bestMove, value, timeTaken, ply) {
+  setThinking(false);
+  if (bestMove == null) {
+    const playerWon = !g_playerWhite;
+    if (playerWon) {
+      showResult('🏆', 'Checkmate!', 'You won — well played!');
+    } else {
+      showResult('🤖', 'Checkmate!', 'The engine wins. Better luck next time!');
+    }
+    return;
+  }
+  _origFinishMove(bestMove, value, timeTaken, ply);
+};
+
+const _origSearchAndRedraw = window.SearchAndRedraw;
+window.SearchAndRedraw = function() {
+  setThinking(true);
+  _origSearchAndRedraw();
+};
+
+// ─── Init ─────────────────────────────────────────────────────────────
+$(document).ready(function() {
+  g_timeout = DIFFICULTY_TIMES[currentDifficulty];
+  UINewGame();
+});
+</script>
+</body>
+</html>
